@@ -12,77 +12,74 @@ static std::queue<ucontext_t *> readyQueue;
 static std::queue<ucontext_t *> LockQueue;
 
 static ucontext_t *current;
-static ucontext_t *scheduler;
+static ucontext_t *iter;
 static bool first = false;
 
-//initialize ucp here
-
-// int thread_libinit(thread_startfunc_t func, void *arg) {
-// 	//handling error: check if init is true, then return -1
-// 	if (first == true) {
-// 		return -1; //error
-// 	}
-// 	first = true;
-// 	thread_create(func, arg);
-// 	current = new ucontext_t;
-// 	current = readyQueue.front();
-// 	readyQueue.pop();
-// 	iter = new ucontext_t;
-// 	getcontext(iter);
-// 	swapcontext(iter, current);
-// 	ucontext_t *next;
-// 	while (!readyQueue.empty()){
-// 		next = new ucontext_t;
-// 		next = readyQueue.front();
-// 		current = readyQueue.front();
-// 		readyQueue.pop();
-// 		swapcontext(iter, next);
-// 	}
-// 	return 0;
-// }
+static int runFunc(thread_startfunc_t func, void *arg) {
+	func(arg);
+	swapcontext(current,iter);
+	return 0;
+}
 
 int thread_libinit(thread_startfunc_t func, void *arg) {
 	//handling error: check if init is true, then return -1
-	if (first == true) {
+	printf("lib init starts\n");
+	if (first) {
 		return -1; //error
 	}
+
 	first = true;
-	thread_create(func, arg);
-	current = new ucontext_t;
-	current = readyQueue.front();
-	readyQueue.pop();
-	scheduler = new ucontext_t;
-	getcontext(iter);
-	swapcontext(iter, current);
-	ucontext_t *next;
-	while (!readyQueue.empty()){
-		next = new ucontext_t;
-		next = readyQueue.front();
-		current = readyQueue.front();
-		readyQueue.pop();
-		swapcontext(iter, next);
+
+	//this thread is not created, return -1
+	if(thread_create(func,arg)<0) {
+		return -1;
 	}
+
+	//getting thread init thread off the queue
+	//now front is thread init, q size is 0
+	ucontext_t* front = readyQueue.front();
+	readyQueue.pop();
+	current = front;
+
+	//set up iterator as current context
+	iter = new ucontext_t;
+	getcontext(iter);
+	//run front thread (master)
+	swapcontext(iter,front);
+	//comes back here after swap in runFunc
+	printf("Queue size: %d\n",(int) readyQueue.size());
+
+	while (readyQueue.size()>0) {
+		printf("q loop\n");
+		ucontext_t* next = readyQueue.front();
+		readyQueue.pop();
+		current = next;
+		swapcontext(iter,current);
+		//it comes back here after swap in runFunc
+	}
+
+	printf("thread library exiting");
+
 	return 0;
 }
 
 int thread_create(thread_startfunc_t func, void *arg) {
 	// initialize thread context
 	printf("thread_create is called!\n");
-	
+	if(!first) {
+		return -1;
+	}
 	ucontext_t *t = new ucontext_t;
-	
 	char *stack = new char [STACK_SIZE];
 	t->uc_stack.ss_sp = stack;
 	t->uc_stack.ss_size = STACK_SIZE;
 	t->uc_stack.ss_flags = 0;
 	t->uc_link = NULL;
-	
-
 	getcontext(t);
-	makecontext(t, (void (*)()) func, 2, arg);
+
+	makecontext(t, (void (*)()) runFunc, 2,func, arg);
 	//add this thread to ready queue
 	readyQueue.push(t);
-
 
 	return 0;
 }

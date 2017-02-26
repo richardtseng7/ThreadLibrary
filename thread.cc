@@ -1,71 +1,124 @@
 #include <ucontext.h>
-#include "interrupt.h" 
+#include "interrupt.h"
+#include "thread.h"
 #include <queue>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
 
 //declare queues of u context here
-std::queue<ucontext_t *> readyQueue;
-std::queue<ucontext_t *> LockQueue;
+static std::queue<ucontext_t *> readyQueue;
+static std::queue<ucontext_t *> LockQueue;
+
+static ucontext_t *current;
+static ucontext_t *scheduler;
+static bool first = false;
 
 //initialize ucp here
 
+// int thread_libinit(thread_startfunc_t func, void *arg) {
+// 	//handling error: check if init is true, then return -1
+// 	if (first == true) {
+// 		return -1; //error
+// 	}
+// 	first = true;
+// 	thread_create(func, arg);
+// 	current = new ucontext_t;
+// 	current = readyQueue.front();
+// 	readyQueue.pop();
+// 	iter = new ucontext_t;
+// 	getcontext(iter);
+// 	swapcontext(iter, current);
+// 	ucontext_t *next;
+// 	while (!readyQueue.empty()){
+// 		next = new ucontext_t;
+// 		next = readyQueue.front();
+// 		current = readyQueue.front();
+// 		readyQueue.pop();
+// 		swapcontext(iter, next);
+// 	}
+// 	return 0;
+// }
+
 int thread_libinit(thread_startfunc_t func, void *arg) {
-	//initialize context
-	ucontext_t t;
-	char *stack = new char [STACK_SIZE];
-	t->uc_stack.ss_sp = stack;
-	t->uc_stack.ss_size = STACK_SIZE;
-	t->uc_stack.ss_flags = 0;
-	t->uc_link = NULL;
-
-	getcontext(t);
-	makecontext(t,func,arg);
-
-	//add this thread to ready queue
-	readyQueue.push(t);
-
-	//when done delete this thread from the queue
+	//handling error: check if init is true, then return -1
+	if (first == true) {
+		return -1; //error
+	}
+	first = true;
+	thread_create(func, arg);
+	current = new ucontext_t;
+	current = readyQueue.front();
+	readyQueue.pop();
+	iter = new ucontext_t;
+	getcontext(iter);
+	swapcontext(iter, current);
+	ucontext_t *next;
+	while (!readyQueue.empty()){
+		next = new ucontext_t;
+		next = readyQueue.front();
+		current = readyQueue.front();
+		readyQueue.pop();
+		swapcontext(iter, next);
+	}
+	return 0;
 }
 
 int thread_create(thread_startfunc_t func, void *arg) {
-	//initialize context
-	ucontext_t t;
+	// initialize thread context
+	printf("thread_create is called!\n");
+	
+	ucontext_t *t = new ucontext_t;
+	
 	char *stack = new char [STACK_SIZE];
 	t->uc_stack.ss_sp = stack;
 	t->uc_stack.ss_size = STACK_SIZE;
 	t->uc_stack.ss_flags = 0;
 	t->uc_link = NULL;
+	
 
 	getcontext(t);
-	makecontext(t,func,arg);
-
+	makecontext(t, (void (*)()) func, 2, arg);
 	//add this thread to ready queue
 	readyQueue.push(t);
 
+
+	return 0;
 }
 
+// YIELD gives up control of CPU, not control of the lock.
 int thread_yield(void) {
-	//if queue is empty, exit
-	if (readyQueue.isEmpty()) {
+	//if R queue is empty, exit
+	if (readyQueue.empty()) {
 		cout << "Thread library exiting.\n";
 		exit(0);
 	}
 	
 	//store ucp to current thread context
-	//add current thread context to queue
-	//get the context of the first one in the queue to ucp
+	//add current thread context to ready queue
+	//get the context of the first thread in ready queue to ucp
+	ucontext_t *t = new ucontext_t;
+	getcontext(t); // store current thread context in t
+	readyQueue.push(t); // thread moved to the back of the R queue
 
+	ucontext_t *nt = new ucontext_t;
+	nt = readyQueue.front();
+	readyQueue.pop();
+	swapcontext(t, nt);
+	return 0;
 }
 
 int thread_lock(unsigned int lock) {
-
+	// thread (usually first one in R queue) acquires lock,
 }
 
 int thread_unlock(unsigned int lock) {
-
+	// thread frees lock
 }
 
 int thread_wait(unsigned int lock, unsigned int cond) {
-
+	// gives up lock
 }
 int thread_signal(unsigned int lock, unsigned int cond) {
 

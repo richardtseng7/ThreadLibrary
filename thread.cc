@@ -51,7 +51,7 @@ int thread_libinit(thread_startfunc_t func, void *arg) {
 	current = new ucontext_t;
 	current = readyQueue.front();
 	readyQueue.pop();
-	iter = new ucontext_t;
+	scheduler = new ucontext_t;
 	getcontext(iter);
 	swapcontext(iter, current);
 	ucontext_t *next;

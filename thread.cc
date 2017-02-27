@@ -35,14 +35,12 @@ inline const char * const BoolToString(bool b)
 
 static void printQ(std::queue<Thread> aQ){
     int size = aQ.size();
-    
     for (int i=0;i<size;i++) {
         Thread cur = aQ.front();
         aQ.pop();
         aQ.push(cur);
         printf("%d, ", cur.threadID);
     }
-    
     printf("\n");
 }
 
@@ -147,13 +145,11 @@ static int toLock(unsigned int lock){
     //first time calling
     if (lockTaken[lock] == 0){
         lockTaken[lock] = current.threadID;
-        //printf("now %d owns the lock!\n",current.threadID);
     }
     //if lock is taken, put the calling thread into the lock queue
     else {
         // handling error: check if thread already has the lock
         if (lockTaken[lock] == current.threadID) {
-        	//printf("correct\n");
             return -1;
         }
         lockQueue[lock].push(current);
@@ -188,8 +184,6 @@ static int toUnlock(unsigned int lock){
     }
     lockTaken[lock] = 0;
     if (lockQueue[lock].size() > 0){
-        //printf("current ID adding to ready q: %d\n", lockQueue[lock].front().threadID);
-
         readyQueue.push(lockQueue[lock].front());
         lockQueue[lock].pop();
         lockTaken[lock] = lockQueue[lock].front().threadID;
@@ -213,7 +207,6 @@ int thread_unlock(unsigned int lock){
 
 
 int thread_wait(unsigned int lock, unsigned int cond){
-	//printf("thread %d calls wait\n",current.threadID);
 	if (!initialized){
 		return -1;
 	}
@@ -240,7 +233,6 @@ int thread_signal(unsigned int lock, unsigned int cond){
 		return -1;
 	}
     interrupt_disable();
-
     if (CVQueue[cond].size() > 0){
         Thread t = CVQueue[cond].front();
         CVQueue[cond].pop();

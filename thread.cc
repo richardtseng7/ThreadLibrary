@@ -26,25 +26,6 @@ static std::map<unsigned int, std::queue<Thread> > lockQueue;
 static std::map<unsigned int, unsigned int> lockTaken;
 static std::map<unsigned int, std::queue<Thread> > CVQueue;
 
-
-inline const char * const BoolToString(bool b)
-{
-    return b ? "true" : "false";
-}
-
-
-static void printQ(std::queue<Thread> aQ){
-    int size = aQ.size();
-    for (int i=0;i<size;i++) {
-        Thread cur = aQ.front();
-        aQ.pop();
-        aQ.push(cur);
-        printf("%d, ", cur.threadID);
-    }
-    printf("\n");
-}
-
-
 static int run(thread_startfunc_t func, void *arg){
     interrupt_enable();
 	func(arg);
@@ -54,7 +35,6 @@ static int run(thread_startfunc_t func, void *arg){
 	return 0;
 }
 
-
 int thread_libinit(thread_startfunc_t func, void *arg){
 	//handling error: check if init is true, then return -1
 	if (initialized){
@@ -62,9 +42,10 @@ int thread_libinit(thread_startfunc_t func, void *arg){
 	}
 	initialized = true;
 	//handling error: this thread is not created, return -1
-	if(thread_create(func,arg) < 0){
+	if(thread_create(func, arg) < 0){
 		return -1;
 	}
+    interrupt_disable();
 	Thread front = readyQueue.front();
 	readyQueue.pop();
 	current = front;
@@ -73,15 +54,16 @@ int thread_libinit(thread_startfunc_t func, void *arg){
 		iter = new ucontext_t;
 	} 
 	catch (std::bad_alloc& ba){
+        delete iter;
+        interrupt_enable();
 		return -1;
 	}
 	getcontext(iter);
-	//run front thread (master)
-    interrupt_disable();
+	//run init thread
 	swapcontext(iter, front.context);
 	//comes back here after swap in run
-	while (readyQueue.size() > 0){		
-			if (current.done){
+	while (readyQueue.size() > 0){
+            if (current.done){
 				delete current.context;
 				delete current.stack;
 			}
@@ -89,20 +71,23 @@ int thread_libinit(thread_startfunc_t func, void *arg){
 			readyQueue.pop();		
 			current = next;
 			swapcontext(iter, current.context);
+        
 	}
-	delete iter;
+    delete current.context;
+    delete current.stack;
+    delete iter;
 	cout << "Thread library exiting.\n";
 	exit(0);
 	return 0;
 }
 
-
 int thread_create(thread_startfunc_t func, void *arg){
-	// initialize thread context
-	if (!initialized){
-		return -1;
-	}
     interrupt_disable();
+    // initialize thread context
+    if (!initialized){
+        interrupt_enable();
+        return -1;
+    }
 	Thread t;
 	try {
 		t.context = new ucontext_t;
@@ -116,10 +101,12 @@ int thread_create(thread_startfunc_t func, void *arg){
         t.threadID = thread_count;
         thread_count++;
         makecontext(t.context, (void (*)()) run, 2, func, arg);
-        //add this thread to ready queue
+        //add thread to ready queue
         readyQueue.push(t);
 	}
 	catch (std::bad_alloc& ba){
+        delete t.context;
+        delete t.stack;
         interrupt_enable();
         return -1;
 	}
@@ -127,56 +114,61 @@ int thread_create(thread_startfunc_t func, void *arg){
 	return 0;
 }
 
-
 int thread_yield(void){
-	if (!initialized){
+    interrupt_disable();
+    if (!initialized){
+        interrupt_enable();
 		return -1;
 	}
-    interrupt_disable();
-	getcontext(current.context); // store current thread context in t
-	readyQueue.push(current); // thread moved to the back of the R queue
+	readyQueue.push(current);
 	swapcontext(current.context, iter);
     interrupt_enable();
 	return 0;
 }
 
-
 static int toLock(unsigned int lock){
-    //first time calling
     if (lockTaken[lock] == 0){
         lockTaken[lock] = current.threadID;
     }
     //if lock is taken, put the calling thread into the lock queue
     else {
-        // handling error: check if thread already has the lock
-        if (lockTaken[lock] == current.threadID) {
+        //handling error: check if thread already has the lock
+        if (lockTaken[lock] == current.threadID){
+            interrupt_enable();
             return -1;
         }
         lockQueue[lock].push(current);
         swapcontext(current.context, iter);
     }
-    return 0;
 }
 
-
 int thread_lock(unsigned int lock){
+    interrupt_disable();
 	//thread (usually first one in R queue) acquires lock,
-	if (!initialized){
+    if (!initialized){
+        interrupt_enable();
 		return -1;
 	}
-    interrupt_disable();
-    if(toLock(lock)==-1) {
-    	interrupt_enable();
-    	return -1;
+    //if lock is not taken, set locktaken[this id] = false
+    if (lockTaken[lock] == 0){
+        lockTaken[lock] = current.threadID;
     }
-    //if its not taken, set locktaken[this id] = false
+    //if lock is taken, put the calling thread into the lock queue
+    else {
+        //handling error: check if thread already has the lock
+        if (lockTaken[lock] == current.threadID){
+            interrupt_enable();
+            return -1;
+        }
+        lockQueue[lock].push(current);
+        swapcontext(current.context, iter);
+    }
     interrupt_enable();
 	return 0;
 }
 
-
 static int toUnlock(unsigned int lock){
-	if (lockTaken.count(lock)==0) {
+	if (lockTaken.count(lock) == 0){
 		return -1;
 	}
     if (lockTaken[lock] != current.threadID){
@@ -184,20 +176,21 @@ static int toUnlock(unsigned int lock){
     }
     lockTaken[lock] = 0;
     if (lockQueue[lock].size() > 0){
+        lockTaken[lock] = lockQueue[lock].front().threadID;
         readyQueue.push(lockQueue[lock].front());
         lockQueue[lock].pop();
-        lockTaken[lock] = lockQueue[lock].front().threadID;
     }
-    return 0;  
+    return 0;
 }
+
 int thread_unlock(unsigned int lock){
-	// thread frees lock
+    interrupt_disable();
+    // thread frees lock
 	if (!initialized){
+        interrupt_enable();
 		return -1;
 	}
-
-    interrupt_disable();
-    if (toUnlock(lock)==-1) {
+    if (toUnlock(lock) == -1){
     	interrupt_enable();
     	return -1;
     }
@@ -205,36 +198,36 @@ int thread_unlock(unsigned int lock){
 	return 0;
 }
 
-
 int thread_wait(unsigned int lock, unsigned int cond){
-	if (!initialized){
-		return -1;
-	}
     interrupt_disable();
-	if (toUnlock(lock)==-1) {
+    if (!initialized){
+        interrupt_enable();
+		return -1;
+	}
+	if (toUnlock(lock) == -1){
 		interrupt_enable();
 		return -1;
 	}
+    //current thread waiting on lock, push to CVQueue
     CVQueue[cond].push(current);
-    ucontext_t *t = new ucontext_t;
-    t = current.context;
 	swapcontext(current.context, iter);
-	if (toLock(lock)==-1) {
+    if (toLock(lock) == -1){
 		interrupt_enable();
 		return -1;
 	}
- 	interrupt_enable();
+    interrupt_enable();
 	return 0;
 }
 
-
 int thread_signal(unsigned int lock, unsigned int cond){
-	if (!initialized){
+    interrupt_disable();
+    if (!initialized){
+        interrupt_enable();
 		return -1;
 	}
-    interrupt_disable();
     if (CVQueue[cond].size() > 0){
-        Thread t = CVQueue[cond].front();
+        Thread t;
+        t = CVQueue[cond].front();
         CVQueue[cond].pop();
         readyQueue.push(t);
     }
@@ -242,16 +235,17 @@ int thread_signal(unsigned int lock, unsigned int cond){
 	return 0;
 }
 
-
 int thread_broadcast(unsigned int lock, unsigned int cond){
-	if (!initialized){
+    interrupt_disable();
+    if (!initialized){
+        interrupt_enable();
 		return -1;
 	}
-    interrupt_disable();
-	while(CVQueue[cond].size() > 0){
-		readyQueue.push(CVQueue[cond].front());
-		CVQueue[cond].pop();
-	}
+    //check for threads in CVQueue waiting on cond and lock
+    while(CVQueue[cond].size() > 0){
+        readyQueue.push(CVQueue[cond].front());
+        CVQueue[cond].pop();
+    }
     interrupt_enable();
 	return 0;
 }

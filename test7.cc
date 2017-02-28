@@ -20,7 +20,7 @@ void parent_thread(void *arg){
     cout << "Parent thread: Started.\n";
     cout << "arg = " << * (int *) arg << endl;
     thread_lock(1);
-    thread_create((thread_startfunc_t) child0_thread, &x);
+    thread_create((thread_startfunc_t) child0_thread, arg);
     cout << "Parent thread: Finished.\n";
 }
 

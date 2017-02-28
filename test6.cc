@@ -21,7 +21,7 @@ void parent_thread(void *arg){
     cout << "Parent thread: Started.\n";
     cout << "arg = " << * (int *) arg << endl;
     thread_lock(1);
-    for(int i = 0; i < 100000; i++){
+    for(int i = 0; i < 1000; i++){
         if (thread_create((thread_startfunc_t) child0_thread, arg) == -1){
             printf("ERROR: Memory leak");
         }

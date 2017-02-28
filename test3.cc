@@ -108,7 +108,7 @@ void cashiers(void* arg){
 
 
 void cashierInit(void* arg){
-    start_preemptions(false, true, 1);
+    //start_preemptions(false, true, 1);
 	// initialize sandwich maker thread
 	thread_create((thread_startfunc_t) sandwichMaker, (void *) 14);
 	// initialize all cashiers threads

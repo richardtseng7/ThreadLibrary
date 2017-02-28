@@ -18,6 +18,9 @@ int main(int argc, char *argv[]){
 void parent_thread(void *arg){
     cout << "Parent thread: Started.\n";
     cout << "arg = " << * (int *) arg << endl;
+    if (thread_wait(1, 2) != -1){
+        printf("ERROR: Thread cannot wait on lock it does not hold");
+    }
     if (thread_lock(1) != 0){
         printf("ERROR: Thread could not acquire lock. \n");
     }
@@ -25,11 +28,8 @@ void parent_thread(void *arg){
         printf("ERROR: Thread could not acquire second lock. \n");
     }
     thread_create((thread_startfunc_t) child0_thread, arg);
-    if(thread_wait(2, 3) != -1){
-        printf("ERROR: Thread never acquired the lock to wait on.\n");
-    }
-    else{
-        printf("Correct error handling for waiting on lock that was never acquired.\n");
+    if (thread_wait(2, 3) != 0){
+        printf("ERROR: Thread wait failed.\n");
     }
     if (thread_wait(1, 4) != 0){
         printf("ERROR: Thread could not wait.\n");

@@ -19,6 +19,12 @@ int main(int argc, char *argv[]){
 void parent_thread(void *arg){
     cout << "Parent thread: Started.\n";
     cout << "arg = " << * (int *) arg << endl;
+    if (thread_signal(1, 3) != 0){
+        printf("ERROR: signal failed.\n");
+    }
+    if (thread_broadcast(21, 7) != 0){
+        printf("ERROR: signal failed.\n");
+    }    
     thread_lock(1);
     thread_create((thread_startfunc_t) child0_thread, arg);
     if (thread_yield() == -1){

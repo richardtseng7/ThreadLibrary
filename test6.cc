@@ -21,15 +21,15 @@ void parent_thread(void *arg){
     cout << "Parent thread: Started.\n";
     cout << "arg = " << * (int *) arg << endl;
     thread_lock(1);
-    for(int i = 0; i < 1000; i++){
+    for(int i = 0; i < 10000; i++){
         if (thread_create((thread_startfunc_t) child0_thread, arg) == -1){
-            printf("ERROR: Memory leak");
+            return;
         }
     }
+    printf("Thread create looped successfully.\n");
     thread_unlock(1);
     cout << "Parent thread: Finished.\n";
 }
 void child0_thread(void *arg){
-    printf("Child0 thread: Started.\n");
-    printf("Child0 thread: Finished.\n");
+    return;
 }
